@@ -1,0 +1,2 @@
+# goyya
+drop packets
