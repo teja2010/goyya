@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	nfqueue "github.com/florianl/go-nfqueue"
@@ -27,6 +30,9 @@ func dropDNSAds(ctx context.Context, adservers string) {
 	defer deleteDnsDroptable()
 
 	db := buildAdServerDb(adservers)
+	if db == nil {
+		return
+	}
 
 	nfqctx, nfqCancel := context.WithCancel(ctx)
 	defer nfqCancel()
@@ -47,9 +53,41 @@ func dropDNSAds(ctx context.Context, adservers string) {
 }
 
 func buildAdServerDb(adservers string) map[string]BlockConf {
+	resp, err := http.Get(adservers)
+	if err != nil {
+		log.Print("Unable to sent GET req to ", adservers, " err:", err)
+		return nil
+	}
+	if resp.StatusCode >= 300 {
+		log.Print("Got ", resp.StatusCode, " not successful")
+		return nil
+	}
+
 	db := make(map[string]BlockConf, 2000)
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		url, blk, ok := urlFromLine(line)
+		if ok {
+			db[url] = blk
+		}
+	}
+	log.Printf("Added %d urls", len(db))
 
 	return db
+}
+
+// see https://kb.adguard.com/en/general/how-to-create-your-own-ad-filters#example-blocking-by-domain-name
+func urlFromLine(line string) (string, BlockConf, bool) {
+
+	line = strings.TrimSpace(line)
+	if strings.HasPrefix(line, "||") && strings.HasSuffix(line, "^") {
+		line = strings.TrimPrefix(line, "||")
+		url := strings.TrimSuffix(line, "^")
+		return url, BlockConf{}, true
+	}
+
+	return "", BlockConf{}, false
 }
 
 func addDnsDropTable() {
