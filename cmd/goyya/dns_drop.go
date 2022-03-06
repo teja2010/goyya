@@ -6,8 +6,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"time"
 
-	nfqueue "github.com/AkihiroSuda/go-netfilter-queue"
+	nfqueue "github.com/florianl/go-nfqueue"
+	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 )
 
@@ -25,24 +27,21 @@ func dropDNSAds(ctx context.Context, adservers string) {
 	defer deleteDnsDroptable()
 
 	db := buildAdServerDb(adservers)
-	nfq, err := nfqueue.NewNFQueue(DNS_QUEUE, QUEUE_SIZE, nfqueue.NF_DEFAULT_PACKET_SIZE)
-	if err != nil {
-		log.Print("Error opening nfqueue", err)
+
+	nfqctx, nfqCancel := context.WithCancel(ctx)
+	defer nfqCancel()
+
+	nfq := registerNFQ(nfqctx,
+		func(pkt gopacket.Packet) int {
+			return processDNSPacket(pkt, db)
+		})
+	if nfq == nil {
+		log.Print("unable to register nfq")
 		return
 	}
-	// defer nfq.Close() // TODO why is it blocking?
+	defer nfq.Close()
 
-	packets := getPktChan(nfq)
-
-dnsLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			break dnsLoop
-		case pkt := <-packets:
-			processDNSPacket(pkt, db)
-		}
-	}
+	<-ctx.Done()
 
 	log.Print("stop drop dns")
 }
@@ -110,23 +109,90 @@ func runNft(config string) {
 	}
 }
 
-func processDNSPacket(pkt nfqueue.NFPacket, db map[string]BlockConf) {
-	log.Print("got a  pkt")
-	switch proto := pkt.Packet.ApplicationLayer().(type) {
-	case *layers.DNS:
-		for _, qs := range proto.Questions {
-			log.Println("Question", string(qs.Name))
-		}
+func registerNFQ(ctx context.Context, fn pktProcessFn) *nfqueue.Nfqueue {
+	config := nfqueue.Config{
+		NfQueue:      DNS_QUEUE,
+		MaxPacketLen: 3000,
+		MaxQueueLen:  QUEUE_SIZE,
+		Copymode:     nfqueue.NfQnlCopyPacket,
+		WriteTimeout: 15 * time.Millisecond,
+		Logger:       log.Default(),
 	}
-	pkt.SetVerdict(nfqueue.NF_ACCEPT)
+
+	nf, err := nfqueue.Open(&config)
+	if err != nil {
+		log.Print("could not open nfqueue socket:", err)
+		return nil
+	}
+
+	err = nf.RegisterWithErrorFunc(ctx,
+		func(a nfqueue.Attribute) int {
+			return hookFn(nf, a, fn)
+		}, func(e error) int {
+			if err != nil {
+				log.Print("ErrFN: ", err)
+			}
+			return 0
+		})
+	if err != nil {
+		log.Print("could not register fn", err)
+		return nil
+	}
+
+	return nf
 }
 
-func getPktChan(nfq *nfqueue.NFQueue) <-chan nfqueue.NFPacket {
-	packets := make(chan nfqueue.NFPacket, QUEUE_SIZE)
-	go func() {
-		for p := range nfq.GetPackets() {
-			packets <- p
+func hookFn(nf *nfqueue.Nfqueue, a nfqueue.Attribute, fn pktProcessFn) int {
+	if a.PacketID == nil {
+		log.Print("Unable to deref Packet details")
+		return 0
+	}
+	id := *a.PacketID
+	if a.Payload == nil {
+		log.Print("Unable to deref Packet details")
+		err := nf.SetVerdict(id, nfqueue.NfAccept)
+		if err != nil {
+			log.Print("SetVerdict err", err)
 		}
-	}()
-	return packets
+		return 0
+	}
+
+	payload := *a.Payload
+
+	var decoder gopacket.Decoder
+	if payload[0]&0xf0 == 0x40 {
+		decoder = layers.LayerTypeIPv4
+	} else {
+		decoder = layers.LayerTypeIPv6
+	}
+
+	pkt := gopacket.NewPacket(
+		payload,
+		decoder,
+		gopacket.DecodeOptions{
+			Lazy:   true,
+			NoCopy: true},
+	)
+
+	verdict := fn(pkt)
+	err := nf.SetVerdict(id, verdict)
+	if err != nil {
+		log.Print("SetVerdict err", err)
+	}
+
+	return 0
+}
+
+type pktProcessFn func(gopacket.Packet) int
+
+func processDNSPacket(pkt gopacket.Packet, db map[string]BlockConf) int {
+	log.Print("got a pkt")
+	switch proto := pkt.ApplicationLayer().(type) {
+	case *layers.DNS:
+		for i, qs := range proto.Questions {
+			log.Println("Question", i, ":", string(qs.Name))
+		}
+	}
+
+	return nfqueue.NfAccept
 }
