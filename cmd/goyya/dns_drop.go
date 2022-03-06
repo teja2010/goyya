@@ -105,7 +105,7 @@ func processDNSPacket(pkt nfqueue.NFPacket, db map[string]BlockConf) {
 	switch proto := pkt.Packet.ApplicationLayer().(type) {
 	case *layers.DNS:
 		for _, qs := range proto.Questions {
-			log.Println("Question", qs.Name)
+			log.Println("Question", string(qs.Name))
 		}
 	}
 	pkt.SetVerdict(nfqueue.NF_ACCEPT)
