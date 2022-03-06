@@ -228,10 +228,11 @@ func processDNSPacket(pkt gopacket.Packet, db map[string]BlockConf) int {
 	switch proto := pkt.ApplicationLayer().(type) {
 	case *layers.DNS:
 		for i, qs := range proto.Questions {
-			log.Println("Question", i, ":", string(qs.Name))
 			url := strings.TrimSpace(string(qs.Name))
+			log.Println("Question", i, ":", url)
 
 			if isBlockedURL(url, db) {
+				log.Println("Blocked ", url)
 				return nfqueue.NfDrop
 			}
 		}
