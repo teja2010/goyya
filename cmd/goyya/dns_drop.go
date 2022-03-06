@@ -8,6 +8,7 @@ import (
 	"os/exec"
 
 	nfqueue "github.com/AkihiroSuda/go-netfilter-queue"
+	"github.com/google/gopacket/layers"
 )
 
 const (
@@ -33,14 +34,17 @@ func dropDNSAds(ctx context.Context, adservers string) {
 
 	packets := getPktChan(nfq)
 
+dnsLoop:
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			break dnsLoop
 		case pkt := <-packets:
 			processDNSPacket(pkt, db)
 		}
 	}
+
+	log.Print("stop drop dns")
 }
 
 func buildAdServerDb(adservers string) map[string]BlockConf {
@@ -97,7 +101,13 @@ func runNft(config string) {
 }
 
 func processDNSPacket(pkt nfqueue.NFPacket, db map[string]BlockConf) {
-	log.Print(pkt.Packet)
+	log.Print("got a  pkt")
+	switch proto := pkt.Packet.ApplicationLayer().(type) {
+	case *layers.DNS:
+		for _, qs := range proto.Questions {
+			log.Println("Question", qs.Name)
+		}
+	}
 	pkt.SetVerdict(nfqueue.NF_ACCEPT)
 }
 
