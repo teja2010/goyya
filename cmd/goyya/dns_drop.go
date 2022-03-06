@@ -30,7 +30,7 @@ func dropDNSAds(ctx context.Context, adservers string) {
 		log.Print("Error opening nfqueue", err)
 		return
 	}
-	defer nfq.Close()
+	// defer nfq.Close() // TODO why is it blocking?
 
 	packets := getPktChan(nfq)
 
@@ -62,9 +62,14 @@ table inet dns_drop {
 delete table inet dns_drop
 
 table inet dns_drop {
-	chain c {
+	chain c_pre {
 		type filter hook prerouting priority filter; policy accept;
-		meta l4proto udp udp dport 53 queue num %d bypass
+		meta l4proto udp udp dport 53 queue num %[1]d bypass
+	}
+
+	chain c_post {
+		type filter hook postrouting priority filter; policy accept;
+		meta l4proto udp udp dport 53 queue num %[1]d bypass
 	}
 }
 `,
