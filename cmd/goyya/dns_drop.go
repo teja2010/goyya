@@ -57,6 +57,11 @@ func addDnsDropTable() {
 
 	conf := fmt.Sprintf(`
 table inet dns_drop {
+}
+
+delete table inet dns_drop
+
+table inet dns_drop {
 	chain c {
 		type filter hook prerouting priority filter; policy accept;
 		meta l4proto udp udp dport 53 queue num %d bypass
