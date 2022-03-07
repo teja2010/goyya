@@ -14,6 +14,15 @@ import (
 	nfqueue "github.com/florianl/go-nfqueue"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+var (
+	dropsCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "How many HTTP requests processed, partitioned by status code and HTTP method.",
+		})
 )
 
 const (
@@ -25,6 +34,8 @@ type BlockConf struct {
 }
 
 func dropDNSAds(ctx context.Context, adservers string) {
+
+	prometheus.MustRegister(dropsCounter)
 
 	addDnsDropTable()
 	defer deleteDnsDroptable()
@@ -239,6 +250,7 @@ func processDNSPacket(pkt gopacket.Packet, db map[string]BlockConf) int {
 
 			if isBlockedURL(url, db) {
 				log.Println("Blocked ", url)
+				dropsCounter.Inc()
 				return nfqueue.NfDrop
 			}
 		}

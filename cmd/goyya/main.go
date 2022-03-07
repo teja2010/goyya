@@ -4,21 +4,25 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 
 	"github.com/BurntSushi/toml"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type config struct {
-	Adservers string
+	Adservers      string
+	prometheusAddr string
 }
 
 func main() {
 	log.Println("goyya started")
 
 	conf := parseFlags()
+	setupPrometheus(conf.prometheusAddr)
 
 	wg := new(sync.WaitGroup)
 
@@ -69,4 +73,14 @@ func parseFlags() config {
 	}
 
 	return config
+}
+
+func setupPrometheus(addr string) {
+	http.Handle("/metrics", promhttp.Handler())
+	go func() {
+		err := http.ListenAndServe(addr, nil)
+		if err != nil && err != http.ErrServerClosed {
+			log.Print("ListenAndServe Err ", err)
+		}
+	}()
 }
