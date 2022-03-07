@@ -1,1 +1,2 @@
-adservers = "https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/EnglishFilter/sections/adservers.txt"
+adservers = "https://easylist.to/easylist/easylist.txt"
+# adservers = "https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/EnglishFilter/sections/adservers.txt"

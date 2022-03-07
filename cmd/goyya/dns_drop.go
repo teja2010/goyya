@@ -81,10 +81,16 @@ func buildAdServerDb(adservers string) map[string]BlockConf {
 func urlFromLine(line string) (string, BlockConf, bool) {
 
 	line = strings.TrimSpace(line)
-	if strings.HasPrefix(line, "||") && strings.HasSuffix(line, "^") {
+	if strings.HasPrefix(line, "||") {
 		line = strings.TrimPrefix(line, "||")
-		url := strings.TrimSuffix(line, "^")
-		return url, BlockConf{}, true
+		if strings.HasSuffix(line, "^") {
+			url := strings.TrimSuffix(line, "^")
+			return url, BlockConf{}, true
+		}
+		if strings.HasSuffix(line, "^$third-party") {
+			url := strings.TrimSuffix(line, "^$third-party")
+			return url, BlockConf{}, true
+		}
 	}
 
 	return "", BlockConf{}, false

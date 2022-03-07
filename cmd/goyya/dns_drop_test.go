@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestBuildAdServersDB(t *testing.T) {
-	db := buildAdServerDb("https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/EnglishFilter/sections/adservers.txt")
+	db := buildAdServerDb("https://easylist.to/easylist/easylist.txt")
 
 	if db == nil {
 		t.Error("error building Adserver")
