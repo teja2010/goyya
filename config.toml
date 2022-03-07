@@ -1,2 +1,3 @@
 adservers = "https://easylist.to/easylist/easylist.txt"
+metricsAddr = "127.0.0.11:9300"
 # adservers = "https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/EnglishFilter/sections/adservers.txt"

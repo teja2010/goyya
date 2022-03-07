@@ -14,15 +14,15 @@ import (
 )
 
 type config struct {
-	Adservers      string
-	prometheusAddr string
+	Adservers   string
+	MetricsAddr string
 }
 
 func main() {
 	log.Println("goyya started")
 
 	conf := parseFlags()
-	setupPrometheus(conf.prometheusAddr)
+	setupPrometheus(conf.MetricsAddr)
 
 	wg := new(sync.WaitGroup)
 
