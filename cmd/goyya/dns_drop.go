@@ -20,8 +20,8 @@ import (
 var (
 	dropsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "http_requests_total",
-			Help: "How many HTTP requests processed, partitioned by status code and HTTP method.",
+			Name: "dns_drops_total",
+			Help: "How many dns requests were dropped",
 		})
 )
 
