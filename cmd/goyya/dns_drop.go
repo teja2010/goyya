@@ -20,8 +20,9 @@ import (
 var (
 	dropsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "dns_drops_total",
-			Help: "How many dns requests were dropped",
+			Namespace: "goyya",
+			Name:      "dns_drops_total",
+			Help:      "How many dns requests were dropped",
 		})
 )
 
