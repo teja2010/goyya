@@ -79,7 +79,7 @@ func buildAdServerDb(adservers string) map[string]BlockConf {
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
-		url, blk, ok := urlFromLine(line)
+		url, blk, ok := urlFromLine_StevenBlack(line)
 		if ok {
 			db[url] = blk
 		}
@@ -89,8 +89,20 @@ func buildAdServerDb(adservers string) map[string]BlockConf {
 	return db
 }
 
+func urlFromLine_StevenBlack(line string) (string, BlockConf, bool) {
+
+	line = strings.TrimSpace(line)
+	if strings.HasPrefix(line, "0.0.0.0 ") {
+		url := strings.TrimPrefix(line, "0.0.0.0 ")
+		return url, BlockConf{}, true
+	}
+
+	return "", BlockConf{}, false
+}
+
 // see https://kb.adguard.com/en/general/how-to-create-your-own-ad-filters#example-blocking-by-domain-name
-func urlFromLine(line string) (string, BlockConf, bool) {
+//func urlFromLine_EasyList(line string) (string, BlockConf, bool) {
+func _(line string) (string, BlockConf, bool) {
 
 	line = strings.TrimSpace(line)
 	if strings.HasPrefix(line, "||") {
