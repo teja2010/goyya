@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -50,7 +51,7 @@ func dropDNSAds(ctx context.Context, adservers string) {
 	defer nfqCancel()
 
 	nfq := registerNFQ(nfqctx,
-		func(pkt gopacket.Packet) int {
+		func(pkt gopacket.Packet) (int, bool) {
 			return processDNSPacket(pkt, db)
 		})
 	if nfq == nil {
@@ -242,34 +243,65 @@ func hookFn(nf *nfqueue.Nfqueue, a nfqueue.Attribute, fn pktProcessFn) int {
 			NoCopy: true},
 	)
 
-	verdict := fn(pkt)
-	err := nf.SetVerdict(id, verdict)
-	if err != nil {
-		log.Print("SetVerdict err", err)
+	verdict, mod := fn(pkt)
+	if mod {
+		dropsCounter.Inc()
+	}
+
+	if mod {
+		err := nf.SetVerdictModPacket(id, verdict, pkt.Data())
+		if err != nil {
+			log.Print("SetVerdictModPacket err", err)
+		}
+
+	} else {
+		err := nf.SetVerdict(id, verdict)
+		if err != nil {
+			log.Print("SetVerdict err", err)
+		}
 	}
 
 	return 0
 }
 
-type pktProcessFn func(gopacket.Packet) int
+type pktProcessFn func(gopacket.Packet) (int, bool)
 
-func processDNSPacket(pkt gopacket.Packet, db map[string]BlockConf) int {
+func processDNSPacket(pkt gopacket.Packet, db map[string]BlockConf) (int, bool) {
+	modified := false
 	log.Print("got a pkt")
 	switch proto := pkt.ApplicationLayer().(type) {
 	case *layers.DNS:
-		for i, qs := range proto.Questions {
-			url := strings.TrimSpace(string(qs.Name))
+		for i, ans := range proto.Answers {
+			url := strings.TrimSpace(string(ans.Name))
 			log.Println("Question", i, ":", url)
 
 			if isBlockedURL(url, db) {
 				log.Println("Blocked ", url)
-				dropsCounter.Inc()
-				return nfqueue.NfDrop
+			}
+
+			if ans.IP.To4() != nil {
+				ans.IP = net.IPv4zero
+				modified = true
+			}
+		}
+
+		if modified {
+			// update packet len and checksums since it was changed
+			pkt.TransportLayer().(*layers.UDP).SetNetworkLayerForChecksum(pkt.NetworkLayer())
+			buffer := gopacket.NewSerializeBuffer()
+			options := gopacket.SerializeOptions{
+				ComputeChecksums: true,
+				FixLengths:       true,
+			}
+
+			if err := gopacket.SerializePacket(buffer, options, pkt); err != nil {
+				log.Print("Serializing modified packet failed", err)
+				return nfqueue.NfDrop, false
 			}
 		}
 	}
 
-	return nfqueue.NfAccept
+	return nfqueue.NfAccept, modified
 }
 
 func isBlockedURL(url string, db map[string]BlockConf) bool {
